@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "fpl-sim"
+version = "0.1.0"
+description = "Simulation engine for Fantasy Premier League"
+authors = ["Belkacem Berchiche <b_berchiche@esi.dz>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^25.9.0"
+isort = "^6.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
