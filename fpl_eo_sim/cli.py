@@ -14,6 +14,7 @@ import numpy as np
 from fpl_eo_sim.models import Manager, Player, Position
 from fpl_eo_sim.sampling import make_rng
 from fpl_eo_sim.simulator import (
+    ConcentratedNpcPicker,
     FplLikePointsModel,
     NormalPointsModel,
     RandomNpcPicker,
@@ -192,6 +193,12 @@ def main() -> None:
         default=5,
         help="Number of safe players for barbell strategy",
     )
+    parser.add_argument(
+        "--concentration",
+        type=float,
+        default=0.7,
+        help="Concentration level for NPC picker (0.0=uniform, 1.0=max concentration)",
+    )
 
     args = parser.parse_args()
 
@@ -203,7 +210,7 @@ def main() -> None:
     managers = create_synthetic_managers(args.managers, args.budget)
 
     # Create components
-    npc_picker = RandomNpcPicker()
+    npc_picker = ConcentratedNpcPicker(concentration=args.concentration)
     points_model = get_points_model(args.points)
     my_strategy_fn = get_strategy_function(args.strategy)
 
@@ -236,6 +243,7 @@ def main() -> None:
     print(f"Managers: {results['managers']}")
     print(f"Players: {results['players']}")
     print(f"Budget: {results['budget']}")
+    print(f"Concentration: {args.concentration}")
     print()
 
     summary = results["summary"]

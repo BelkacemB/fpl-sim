@@ -127,13 +127,14 @@ class RandomNpcPicker:
 
 
 class ConcentratedNpcPicker:
-    """Optimized NPC picker that concentrates ownership around star players."""
+    """NPC picker that concentrates ownership around star players (high-priced)."""
 
     def __init__(self, concentration: float = 0.7):
         """Initialize with concentration parameter.
         
         Args:
             concentration: Concentration level (0.0 = uniform, 1.0 = maximum concentration)
+                          Higher values mean more focus on expensive players
         """
         self.concentration = max(0.0, min(1.0, concentration))
 
@@ -143,78 +144,57 @@ class ConcentratedNpcPicker:
         """Pick XI with concentration around star players under budget constraint.
 
         Returns array of 11 unique player IDs.
-        Uses optimized selection for better performance.
+        Uses weighted selection favoring expensive players based on concentration parameter.
         """
+        max_attempts = 1000
         player_ids = np.array([p.id for p in players])
         prices = np.array([p.price for p in players])
         
-        # Quick budget check - if cheapest 11 exceed budget, return them
-        sorted_prices = np.sort(prices)
-        if sorted_prices[:11].sum() > budget:
-            return player_ids[np.argsort(prices)[:11]]
-        
         # Create selection weights based on price and concentration
+        # Higher concentration = more weight on expensive players
         if self.concentration == 0.0:
-            # Uniform selection - use fast random selection
-            max_attempts = min(20, len(players))
-            for attempt in range(max_attempts):
-                selected_indices = rng.choice(len(players), size=11, replace=False)
-                selected_ids = player_ids[selected_indices]
-                if prices[selected_indices].sum() <= budget:
-                    return selected_ids
+            # Uniform selection
+            weights = np.ones(len(players))
         else:
-            # Weighted selection for concentration
-            price_min, price_max = prices.min(), prices.max()
-            if price_max > price_min:
-                normalized_prices = (prices - price_min) / (price_max - price_min)
-                weights = np.power(normalized_prices + 0.1, self.concentration * 3)
-            else:
-                weights = np.ones(len(players))
-            
-            weights = weights / weights.sum()
-            
-            # Try weighted selection with reduced attempts
-            max_attempts = min(50, len(players))
-            for attempt in range(max_attempts):
+            # Weight by price raised to concentration power
+            # This creates concentration around expensive players
+            normalized_prices = (prices - prices.min()) / (prices.max() - prices.min() + 1e-8)
+            weights = np.power(normalized_prices + 0.1, self.concentration * 3)
+        
+        weights = weights / weights.sum()
+
+        for attempt in range(max_attempts):
+            # Weighted selection without replacement
+            selected_indices = rng.choice(
+                len(players), size=11, replace=False, p=weights
+            )
+            selected_ids = player_ids[selected_indices]
+            total_price = prices[selected_indices].sum()
+
+            if total_price <= budget:
+                return selected_ids
+
+        # If budget constraint too tight, fall back to cheaper players
+        # but still maintain some concentration
+        sorted_indices = np.argsort(prices)
+        for i in range(len(players) - 11):
+            remaining_indices = sorted_indices[i:]
+            if len(remaining_indices) >= 11:
+                remaining_weights = weights[remaining_indices]
+                remaining_weights = remaining_weights / remaining_weights.sum()
+                
                 selected_indices = rng.choice(
-                    len(players), size=11, replace=False, p=weights
+                    remaining_indices, size=11, replace=False, p=remaining_weights
                 )
                 selected_ids = player_ids[selected_indices]
-                if prices[selected_indices].sum() <= budget:
+                total_price = prices[selected_indices].sum()
+                if total_price <= budget:
                     return selected_ids
 
-        # Fast greedy fallback - much faster than weighted selection
-        selected_indices = []
-        remaining_budget = budget
-        
-        if self.concentration > 0.0:
-            # Sort by weight (descending) for concentration
-            weight_sorted_indices = np.argsort(weights)[::-1]
-            for idx in weight_sorted_indices:
-                if len(selected_indices) >= 11:
-                    break
-                if prices[idx] <= remaining_budget:
-                    selected_indices.append(idx)
-                    remaining_budget -= prices[idx]
-        
-        # Fill remaining slots with cheapest players
-        if len(selected_indices) < 11:
-            remaining_indices = [i for i in range(len(players)) if i not in selected_indices]
-            remaining_prices = prices[remaining_indices]
-            remaining_sorted = np.argsort(remaining_prices)
-            
-            for idx in remaining_sorted:
-                if len(selected_indices) >= 11:
-                    break
-                if remaining_prices[idx] <= remaining_budget:
-                    selected_indices.append(remaining_indices[idx])
-                    remaining_budget -= remaining_prices[idx]
+        # Fallback: return cheapest 11 players
+        cheapest_indices = np.argsort(prices)[:11]
+        return player_ids[cheapest_indices]
 
-        # Final fallback: cheapest 11 players
-        if len(selected_indices) < 11:
-            return player_ids[np.argsort(prices)[:11]]
-
-        return player_ids[selected_indices]
 
 class SimulationEngine:
     """Main simulation engine."""
