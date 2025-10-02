@@ -115,27 +115,27 @@ def fpl_like_points(
     n: int,
     base_probs: np.ndarray | None = None,
     base_max: int = 6,
-    haul_prob: float = 0.05,
+    haul_prob: float = 0.15,  # Increased from 0.05 to 0.15 for more hauls
     haul_min: int = 8,
-    haul_cap: int = 20,
+    haul_cap: int = 30,  # Increased from 20 to 30 for fatter tail
 ) -> np.ndarray:
-    """Sample FPL-like points with common 0–6 scores and rare 10+ hauls.
+    """Sample FPL-like points with common 0–6 scores and rare 8+ hauls.
 
     The distribution is a simple mixture:
     - With probability (1 - haul_prob): draw from a categorical over {0..base_max}
-      skewed towards small values with mode at 2.
+      skewed towards higher values with mode at 3 for realistic totals.
     - With probability haul_prob: draw a haul score in [haul_min, haul_cap]
-      using a capped geometric tail.
+      using a capped geometric tail with fatter distribution.
 
     Args:
         rng: Random number generator
         n: Number of samples to draw
         base_probs: Optional probabilities over {0..base_max}. If None, uses a
-            default vector shaped for mode at 2 and rapidly decreasing tail.
+            default vector shaped for mode at 3 and higher variance.
         base_max: Maximum non-haul score (inclusive), default 6
-        haul_prob: Probability of a haul event, default 0.05
+        haul_prob: Probability of a haul event, default 0.12
         haul_min: Minimum haul points, default 8
-        haul_cap: Maximum haul points (cap), default 20
+        haul_cap: Maximum haul points (cap), default 30
 
     Returns:
         Array of shape (n,) with integer-like floats representing points.
@@ -157,13 +157,14 @@ def fpl_like_points(
         # Heuristic discrete profile for {0..6}: mode at 2, thin right tail
         # If base_max != 6, construct a decaying distribution centered near 2
         if base_max == 6:
+            # Shifted distribution with higher mean for 40-60 point totals
             base_probs = np.array(
-                [0.16, 0.19, 0.25, 0.16, 0.11, 0.08, 0.05], dtype=float
+                [0.05, 0.08, 0.15, 0.25, 0.22, 0.15, 0.10], dtype=float
             )
         else:
-            # Create a discrete Laplace-like shape peaked around 2
-            center = 2.0
-            decay = 0.7
+            # Create a discrete Laplace-like shape peaked around 4 for higher totals
+            center = 4.0
+            decay = 0.5
             weights = np.power(decay, np.abs(support - center))
             base_probs = weights.astype(float)
         base_probs = base_probs / float(base_probs.sum())
@@ -187,9 +188,10 @@ def fpl_like_points(
     if num_hauls == 0:
         return base_draws.astype(float)
 
-    # Geometric tail (p=0.5) shifted by haul_min and capped at haul_cap
+    # Geometric tail (p=0.3) shifted by haul_min and capped at haul_cap
+    # Lower p creates fatter tail for more variance
     # Values: haul_min + Geometric(p) - 1, then clip to cap
-    tail = haul_min + rng.geometric(p=0.5, size=num_hauls) - 1
+    tail = haul_min + rng.geometric(p=0.3, size=num_hauls) - 1
     tail = np.clip(tail, haul_min, haul_cap)
 
     result = base_draws.astype(int)
