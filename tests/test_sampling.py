@@ -5,8 +5,9 @@ import pytest
 
 from fpl_eo_sim.sampling import (
     make_rng,
-    normal_points,
-    student_t_points,
+    poisson_points,
+    negative_binomial_points,
+    generate_points_by_position,
     weighted_choice_without_replacement,
 )
 
@@ -89,52 +90,105 @@ def test_weighted_choice_without_replacement_invalid_inputs():
         )
 
 
-def test_normal_points():
-    """Test normal points generation."""
+def test_poisson_points():
+    """Test Poisson points generation."""
     rng = make_rng(42)
     n = 100
-    mean = 5.0
-    sd = 2.0
+    mean = 3.5
 
-    points = normal_points(rng, n, mean, sd)
+    points = poisson_points(rng, n, mean)
 
     assert len(points) == n
     assert isinstance(points, np.ndarray)
     # Check that mean is approximately correct (within 3 standard errors)
-    assert abs(np.mean(points) - mean) < 3 * sd / np.sqrt(n)
+    expected_std = np.sqrt(mean)
+    assert abs(np.mean(points) - mean) < 3 * expected_std / np.sqrt(n)
+    # All points should be non-negative integers
+    assert np.all(points >= 0)
+    assert np.all(points == np.floor(points))
 
 
-def test_normal_points_invalid_n():
-    """Test normal points with invalid n."""
+def test_poisson_points_invalid_inputs():
+    """Test Poisson points with invalid inputs."""
     rng = make_rng(42)
 
     with pytest.raises(ValueError, match="Cannot generate negative number of points"):
-        normal_points(rng, -1)
+        poisson_points(rng, -1, 3.5)
+
+    with pytest.raises(ValueError, match="Mean must be non-negative"):
+        poisson_points(rng, 10, -1.0)
 
 
-def test_student_t_points():
-    """Test Student's t points generation."""
+def test_negative_binomial_points():
+    """Test Negative Binomial points generation."""
     rng = make_rng(42)
     n = 100
-    df = 5.0
+    mean = 5.0
+    dispersion = 2.0
 
-    points = student_t_points(rng, n, df)
+    points = negative_binomial_points(rng, n, mean, dispersion)
 
     assert len(points) == n
     assert isinstance(points, np.ndarray)
-    # Student's t should have mean approximately 0
-    assert abs(np.mean(points)) < 3 / np.sqrt(n)
+    # Check that mean is approximately correct (within 3 standard errors)
+    expected_var = mean + mean**2 / dispersion
+    expected_std = np.sqrt(expected_var)
+    assert abs(np.mean(points) - mean) < 3 * expected_std / np.sqrt(n)
+    # All points should be non-negative integers
+    assert np.all(points >= 0)
+    assert np.all(points == np.floor(points))
 
 
-def test_student_t_points_invalid_inputs():
-    """Test Student's t points with invalid inputs."""
+def test_negative_binomial_points_invalid_inputs():
+    """Test Negative Binomial points with invalid inputs."""
     rng = make_rng(42)
 
     with pytest.raises(ValueError, match="Cannot generate negative number of points"):
-        student_t_points(rng, -1)
+        negative_binomial_points(rng, -1, 5.0, 2.0)
 
-    with pytest.raises(ValueError, match="Degrees of freedom must be positive"):
-        student_t_points(rng, 10, df=0)
+    with pytest.raises(ValueError, match="Mean must be non-negative"):
+        negative_binomial_points(rng, 10, -1.0, 2.0)
 
-    with pytest.raises(ValueError, match="Degrees of freedom must be positive"):
-        student_t_points(rng, 10, df=-1)
+    with pytest.raises(ValueError, match="Dispersion must be positive"):
+        negative_binomial_points(rng, 10, 5.0, 0.0)
+
+    with pytest.raises(ValueError, match="Dispersion must be positive"):
+        negative_binomial_points(rng, 10, 5.0, -1.0)
+
+
+def test_generate_points_by_position():
+    """Test position-based point generation."""
+    from fpl_eo_sim.models import Player
+    
+    rng = make_rng(42)
+    players = [
+        Player(id=0, name="GK1", price=5.0, position="GK", team="A"),
+        Player(id=1, name="GK2", price=5.5, position="GK", team="B"),
+        Player(id=2, name="DEF1", price=6.0, position="DEF", team="A"),
+        Player(id=3, name="MID1", price=8.0, position="MID", team="A"),
+        Player(id=4, name="FWD1", price=10.0, position="FWD", team="A"),
+    ]
+
+    points = generate_points_by_position(rng, players)
+
+    assert len(points) == 5
+    assert all(pid in points for pid in [0, 1, 2, 3, 4])
+    assert all(isinstance(p, float) for p in points.values())
+    assert all(p >= 0 for p in points.values())
+
+
+def test_generate_points_by_position_unknown_position():
+    """Test position-based point generation with unknown position."""
+    from fpl_eo_sim.models import Player
+    
+    rng = make_rng(42)
+    # Create a player with invalid position by bypassing validation
+    player = Player.__new__(Player)
+    player.id = 0
+    player.name = "Test"
+    player.price = 5.0
+    player.position = "INVALID"  # type: ignore
+    player.team = "A"
+
+    with pytest.raises(ValueError, match="Unknown position: INVALID"):
+        generate_points_by_position(rng, [player])

@@ -15,11 +15,9 @@ from fpl_eo_sim.models import Manager, Player, Position
 from fpl_eo_sim.sampling import make_rng
 from fpl_eo_sim.simulator import (
     ConcentratedNpcPicker,
-    FplLikePointsModel,
-    NormalPointsModel,
+    PositionBasedPointsModel,
     RandomNpcPicker,
     SimulationEngine,
-    StudentTPointsModel,
 )
 from fpl_eo_sim.strategies import (
     pick_barbell,
@@ -95,14 +93,10 @@ def get_strategy_function(strategy_name: str):
 
 def get_points_model(points_type: str, **kwargs):
     """Get points model by type."""
-    if points_type == "normal":
-        return NormalPointsModel(**kwargs)
-    elif points_type == "studentt":
-        return StudentTPointsModel(**kwargs)
-    elif points_type == "fpl_like":
-        return FplLikePointsModel(**kwargs)
+    if points_type == "position_based":
+        return PositionBasedPointsModel(**kwargs)
     else:
-        raise ValueError(f"Unknown points model: {points_type}")
+        raise ValueError(f"Unknown points model: {points_type}. Use 'position_based' for the new Poisson/Negative Binomial model.")
 
 
 def run_monte_carlo(
@@ -177,9 +171,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--points",
-        choices=["normal", "studentt", "fpl_like"],
-        default="fpl_like",
-        help="Points model",
+        choices=["position_based"],
+        default="position_based",
+        help="Points model (Poisson for GK, Negative Binomial for others)",
     )
     parser.add_argument(
         "--strategy",

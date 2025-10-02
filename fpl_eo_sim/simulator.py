@@ -11,7 +11,7 @@ from typing import Any, Callable
 import numpy as np
 
 from fpl_eo_sim.models import Manager, Player, Squad, validate_squad_constraints
-from fpl_eo_sim.sampling import fpl_like_points
+from fpl_eo_sim.sampling import generate_points_by_position
 
 
 class PointsModel(ABC):
@@ -25,66 +25,14 @@ class PointsModel(ABC):
         pass
 
 
-class NormalPointsModel(PointsModel):
-    """Normal distribution points model."""
-
-    def __init__(self, mean: float = 0.0, sd: float = 1.0) -> None:
-        self.mean = mean
-        self.sd = sd
+class PositionBasedPointsModel(PointsModel):
+    """Position-based points model using Poisson for GK and Negative Binomial for others."""
 
     def sample_points(
         self, rng: np.random.Generator, players: list[Player]
     ) -> dict[int, float]:
-        """Sample points from normal distribution."""
-        points = rng.normal(self.mean, self.sd, len(players))
-        return {player.id: float(points[i]) for i, player in enumerate(players)}
-
-
-class StudentTPointsModel(PointsModel):
-    """Student's t-distribution points model."""
-
-    def __init__(self, df: float = 5.0) -> None:
-        self.df = df
-
-    def sample_points(
-        self, rng: np.random.Generator, players: list[Player]
-    ) -> dict[int, float]:
-        """Sample points from Student's t-distribution."""
-        points = rng.standard_t(self.df, len(players))
-        return {player.id: float(points[i]) for i, player in enumerate(players)}
-
-
-class FplLikePointsModel(PointsModel):
-    """FPL-like points model with realistic scoring distribution."""
-
-    def __init__(
-        self,
-        base_probs: np.ndarray | None = None,
-        base_max: int = 6,
-        haul_prob: float = 0.05,
-        haul_min: int = 8,
-        haul_cap: int = 20,
-    ) -> None:
-        self.base_probs = base_probs
-        self.base_max = base_max
-        self.haul_prob = haul_prob
-        self.haul_min = haul_min
-        self.haul_cap = haul_cap
-
-    def sample_points(
-        self, rng: np.random.Generator, players: list[Player]
-    ) -> dict[int, float]:
-        """Sample points using FPL-like distribution."""
-        points = fpl_like_points(
-            rng,
-            len(players),
-            base_probs=self.base_probs,
-            base_max=self.base_max,
-            haul_prob=self.haul_prob,
-            haul_min=self.haul_min,
-            haul_cap=self.haul_cap,
-        )
-        return {player.id: float(points[i]) for i, player in enumerate(players)}
+        """Sample points using position-specific distributions."""
+        return generate_points_by_position(rng, players)
 
 
 class RandomNpcPicker:
@@ -226,13 +174,17 @@ class SimulationEngine:
         players: list[Player],
         npc_picker: RandomNpcPicker,
         my_strategy_fn: Callable[[np.ndarray, int, np.random.Generator], np.ndarray],
-        points_model: PointsModel,
-        budget: float,
+        points_model: PointsModel | None = None,
+        budget: float = 100.0,
     ) -> dict[str, Any]:
         """Run a single simulation.
 
         Returns dict with eo, my_team, my_score, field_scores, my_rank.
         """
+        # Use default position-based points model if none provided
+        if points_model is None:
+            points_model = PositionBasedPointsModel()
+        
         # Step 1: NPCs pick XI for each manager
         field_squads = []
         for manager in managers:

@@ -4,48 +4,30 @@ import numpy as np
 
 from fpl_eo_sim.models import Manager, Player
 from fpl_eo_sim.simulator import (
-    NormalPointsModel,
+    PositionBasedPointsModel,
     RandomNpcPicker,
     SimulationEngine,
-    StudentTPointsModel,
 )
 from fpl_eo_sim.strategies import pick_lowest_eo
 
 
-def test_normal_points_model():
-    """Test NormalPointsModel."""
+def test_position_based_points_model():
+    """Test PositionBasedPointsModel."""
     rng = np.random.default_rng(42)
     players = [
-        Player(id=0, name="P0", price=10.0, position="MID", team="A"),
-        Player(id=1, name="P1", price=10.0, position="MID", team="A"),
+        Player(id=0, name="GK1", price=5.0, position="GK", team="A"),
+        Player(id=1, name="DEF1", price=6.0, position="DEF", team="A"),
+        Player(id=2, name="MID1", price=8.0, position="MID", team="A"),
+        Player(id=3, name="FWD1", price=10.0, position="FWD", team="A"),
     ]
 
-    model = NormalPointsModel(mean=5.0, sd=2.0)
+    model = PositionBasedPointsModel()
     points = model.sample_points(rng, players)
 
-    assert len(points) == 2
-    assert 0 in points
-    assert 1 in points
-    assert isinstance(points[0], float)
-    assert isinstance(points[1], float)
-
-
-def test_student_t_points_model():
-    """Test StudentTPointsModel."""
-    rng = np.random.default_rng(42)
-    players = [
-        Player(id=0, name="P0", price=10.0, position="MID", team="A"),
-        Player(id=1, name="P1", price=10.0, position="MID", team="A"),
-    ]
-
-    model = StudentTPointsModel(df=5.0)
-    points = model.sample_points(rng, players)
-
-    assert len(points) == 2
-    assert 0 in points
-    assert 1 in points
-    assert isinstance(points[0], float)
-    assert isinstance(points[1], float)
+    assert len(points) == 4
+    assert all(pid in points for pid in [0, 1, 2, 3])
+    assert all(isinstance(p, float) for p in points.values())
+    assert all(p >= 0 for p in points.values())
 
 
 def test_random_npc_picker_basic():
@@ -116,7 +98,7 @@ def test_simulation_engine_simulate_once():
 
     # Create components
     npc_picker = RandomNpcPicker()
-    points_model = NormalPointsModel(mean=0.0, sd=1.0)
+    points_model = PositionBasedPointsModel()
     my_strategy_fn = pick_lowest_eo
     engine = SimulationEngine()
 
@@ -163,7 +145,7 @@ def test_simulation_engine_deterministic():
 
     # Create components
     npc_picker = RandomNpcPicker()
-    points_model = NormalPointsModel(mean=0.0, sd=1.0)
+    points_model = PositionBasedPointsModel()
     my_strategy_fn = pick_lowest_eo
     engine = SimulationEngine()
 
