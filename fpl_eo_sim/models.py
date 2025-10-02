@@ -12,6 +12,9 @@ import numpy as np
 
 Position = Literal["GK", "DEF", "MID", "FWD"]
 
+# Default 1-3-4-3 formation constraints
+DEFAULT_FORMATION: dict[Position, int] = {"GK": 1, "DEF": 3, "MID": 4, "FWD": 3}
+
 
 @dataclass
 class Player:

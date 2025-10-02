@@ -33,8 +33,15 @@ def test_position_based_points_model():
 def test_random_npc_picker_basic():
     """Test RandomNpcPicker basic functionality."""
     rng = np.random.default_rng(42)
+    # Ensure enough players per position to satisfy 1-3-4-3 formation
+    positions = (
+        ["GK"] * 3
+        + ["DEF"] * 6
+        + ["MID"] * 6
+        + ["FWD"] * 5
+    )
     players = [
-        Player(id=i, name=f"P{i}", price=10.0, position="MID", team="A")
+        Player(id=i, name=f"P{i}", price=10.0, position=positions[i], team="A")
         for i in range(20)
     ]
     budget = 100.0
@@ -50,27 +57,15 @@ def test_random_npc_picker_basic():
 def test_random_npc_picker_budget_constraint():
     """Test RandomNpcPicker respects budget constraint."""
     rng = np.random.default_rng(42)
+    positions = (
+        ["GK"] * 3
+        + ["DEF"] * 6
+        + ["MID"] * 6
+        + ["FWD"] * 5
+    )
     players = [
-        Player(id=0, name="P0", price=5.0, position="MID", team="A"),
-        Player(id=1, name="P1", price=5.0, position="MID", team="A"),
-        Player(id=2, name="P2", price=5.0, position="MID", team="A"),
-        Player(id=3, name="P3", price=5.0, position="MID", team="A"),
-        Player(id=4, name="P4", price=5.0, position="MID", team="A"),
-        Player(id=5, name="P5", price=5.0, position="MID", team="A"),
-        Player(id=6, name="P6", price=5.0, position="MID", team="A"),
-        Player(id=7, name="P7", price=5.0, position="MID", team="A"),
-        Player(id=8, name="P8", price=5.0, position="MID", team="A"),
-        Player(id=9, name="P9", price=5.0, position="MID", team="A"),
-        Player(id=10, name="P10", price=5.0, position="MID", team="A"),
-        Player(id=11, name="P11", price=5.0, position="MID", team="A"),
-        Player(id=12, name="P12", price=5.0, position="MID", team="A"),
-        Player(id=13, name="P13", price=5.0, position="MID", team="A"),
-        Player(id=14, name="P14", price=5.0, position="MID", team="A"),
-        Player(id=15, name="P15", price=5.0, position="MID", team="A"),
-        Player(id=16, name="P16", price=5.0, position="MID", team="A"),
-        Player(id=17, name="P17", price=5.0, position="MID", team="A"),
-        Player(id=18, name="P18", price=5.0, position="MID", team="A"),
-        Player(id=19, name="P19", price=5.0, position="MID", team="A"),
+        Player(id=i, name=f"P{i}", price=5.0, position=positions[i], team="A")
+        for i in range(20)
     ]
     budget = 55.0  # 11 * 5.0 = 55.0, should be exactly on budget
 
@@ -90,8 +85,14 @@ def test_simulation_engine_simulate_once():
     rng = np.random.default_rng(42)
 
     # Create test data
+    positions = (
+        ["GK"] * 3
+        + ["DEF"] * 6
+        + ["MID"] * 6
+        + ["FWD"] * 5
+    )
     players = [
-        Player(id=i, name=f"P{i}", price=10.0, position="MID", team="A")
+        Player(id=i, name=f"P{i}", price=10.0, position=positions[i], team="A")
         for i in range(20)
     ]
     managers = [Manager(id=i, name=f"M{i}", budget=100.0) for i in range(5)]
@@ -137,8 +138,14 @@ def test_simulation_engine_deterministic():
     rng2 = np.random.default_rng(42)
 
     # Create test data
+    positions = (
+        ["GK"] * 3
+        + ["DEF"] * 6
+        + ["MID"] * 6
+        + ["FWD"] * 5
+    )
     players = [
-        Player(id=i, name=f"P{i}", price=10.0, position="MID", team="A")
+        Player(id=i, name=f"P{i}", price=10.0, position=positions[i], team="A")
         for i in range(20)
     ]
     managers = [Manager(id=i, name=f"M{i}", budget=100.0) for i in range(3)]

@@ -6,6 +6,7 @@ Contains EO computation and strategy selection functions.
 from __future__ import annotations
 
 import numpy as np
+from fpl_eo_sim.models import Player, Position, DEFAULT_FORMATION
 
 
 def compute_effective_ownership(
@@ -139,3 +140,29 @@ def pick_random(
         raise ValueError("Cannot pick more players than available")
 
     return rng.choice(len(eo), size=K, replace=False)
+
+
+def select_team_with_formation(
+    eo: np.ndarray,
+    players: list[Player],
+    strategy_fn,
+    formation: dict[Position, int] | None = None,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    if rng is None:
+        rng = np.random.default_rng()
+    required = formation or DEFAULT_FORMATION
+
+    ranking = strategy_fn(eo, len(eo), rng)
+    counts: dict[Position, int] = {"GK": 0, "DEF": 0, "MID": 0, "FWD": 0}
+    selected: list[int] = []
+    for idx in ranking:
+        pos = players[idx].position
+        if counts[pos] < required[pos]:
+            selected.append(idx)
+            counts[pos] += 1
+            if len(selected) == sum(required.values()):
+                break
+    if len(selected) != sum(required.values()):
+        raise ValueError("Insufficient players to satisfy formation")
+    return np.array(selected)

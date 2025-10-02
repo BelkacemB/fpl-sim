@@ -10,7 +10,13 @@ from typing import Any, Callable
 
 import numpy as np
 
-from fpl_eo_sim.models import Manager, Player, Squad, validate_squad_constraints
+from fpl_eo_sim.models import (
+    Manager,
+    Player,
+    Squad,
+    validate_squad_constraints,
+)
+from fpl_eo_sim.models import DEFAULT_FORMATION
 from fpl_eo_sim.sampling import generate_points_by_position
 
 
@@ -41,37 +47,59 @@ class RandomNpcPicker:
     def pick_xi(
         self, rng: np.random.Generator, players: list[Player], budget: float
     ) -> np.ndarray:
-        """Pick XI randomly under budget constraint.
-
-        Returns array of 11 unique player IDs.
-        Retries with capped loop; if not feasible, removes most expensive player.
-        """
-        max_attempts = 1000
-        player_ids = np.array([p.id for p in players])
+        """Pick XI with required formation under budget constraint."""
+        max_attempts = 100
         prices = np.array([p.price for p in players])
 
-        for attempt in range(max_attempts):
-            # Random selection without replacement
-            selected_indices = rng.choice(len(players), size=11, replace=False)
-            selected_ids = player_ids[selected_indices]
-            total_price = prices[selected_indices].sum()
+        # Build index lists per position
+        pos_to_indices = {
+            "GK": np.array([i for i, p in enumerate(players) if p.position == "GK"]),
+            "DEF": np.array([i for i, p in enumerate(players) if p.position == "DEF"]),
+            "MID": np.array([i for i, p in enumerate(players) if p.position == "MID"]),
+            "FWD": np.array([i for i, p in enumerate(players) if p.position == "FWD"]),
+        }
 
+        # Try random-by-position selections
+        for _ in range(max_attempts):
+            chosen_indices: list[int] = []
+            for pos, count in DEFAULT_FORMATION.items():
+                pool = pos_to_indices[pos]
+                if len(pool) < count:
+                    # Not enough players in this position; try another attempt
+                    chosen_indices = []
+                    break
+                chosen = rng.choice(pool, size=count, replace=False)
+                chosen_indices.extend(list(chosen))
+            if len(chosen_indices) != 11:
+                # Try again
+                continue
+            total_price = prices[np.array(chosen_indices)].sum()
             if total_price <= budget:
-                return selected_ids
+                return np.array([players[i].id for i in chosen_indices])
 
-        # If budget constraint too tight, remove most expensive players
-        sorted_indices = np.argsort(prices)[::-1]  # Most expensive first
-        for i in range(len(players) - 11):
-            remaining_indices = sorted_indices[i:]
-            if len(remaining_indices) >= 11:
-                selected_indices = rng.choice(remaining_indices, size=11, replace=False)
-                selected_ids = player_ids[selected_indices]
-                total_price = prices[selected_indices].sum()
-                if total_price <= budget:
-                    return selected_ids
+        # Greedy cheapest-by-position fallback
+        chosen_indices = []
+        for pos, count in DEFAULT_FORMATION.items():
+            pool = pos_to_indices[pos]
+            if len(pool) < count:
+                continue
+            pool_sorted = pool[np.argsort(prices[pool])]
+            # Add randomness: pick required from top_k cheapest within the position
+            top_k = min(len(pool_sorted), max(count * 3, count))
+            candidates = pool_sorted[:top_k]
+            chosen = rng.choice(candidates, size=count, replace=False)
+            chosen_indices.extend(list(chosen))
+        if len(chosen_indices) == 11:
+            # If over budget, try to swap expensive with cheaper within same pos
+            if prices[np.array(chosen_indices)].sum() <= budget:
+                return np.array([players[i].id for i in chosen_indices])
 
-        # Fallback: just return first 11 players
-        return player_ids[:11]
+        # Final fallback: return any valid first formation ignoring budget
+        chosen_indices = []
+        for pos, count in DEFAULT_FORMATION.items():
+            pool = pos_to_indices[pos]
+            chosen_indices.extend(list(pool[:count]))
+        return np.array([players[i].id for i in chosen_indices])
 
 
 class ConcentratedNpcPicker:
@@ -88,13 +116,15 @@ class ConcentratedNpcPicker:
     def pick_xi(
         self, rng: np.random.Generator, players: list[Player], budget: float
     ) -> np.ndarray:
-        """Pick XI with concentration around star players under budget constraint.
-
-        Returns array of 11 unique player IDs.
-        Uses optimized selection for better performance.
-        """
+        """Pick XI with concentration around star players under budget and formation."""
         player_ids = np.array([p.id for p in players])
         prices = np.array([p.price for p in players])
+        pos_to_indices = {
+            "GK": np.array([i for i, p in enumerate(players) if p.position == "GK"]),
+            "DEF": np.array([i for i, p in enumerate(players) if p.position == "DEF"]),
+            "MID": np.array([i for i, p in enumerate(players) if p.position == "MID"]),
+            "FWD": np.array([i for i, p in enumerate(players) if p.position == "FWD"]),
+        }
         
         # Quick budget check - if cheapest 11 exceed budget, return them
         sorted_prices = np.sort(prices)
@@ -102,34 +132,34 @@ class ConcentratedNpcPicker:
             return player_ids[np.argsort(prices)[:11]]
         
         # Create selection weights based on price and concentration
-        if self.concentration == 0.0:
-            # Uniform selection - use fast random selection
-            max_attempts = min(20, len(players))
-            for attempt in range(max_attempts):
-                selected_indices = rng.choice(len(players), size=11, replace=False)
-                selected_ids = player_ids[selected_indices]
-                if prices[selected_indices].sum() <= budget:
-                    return selected_ids
+        # Build global weights for concentration
+        price_min, price_max = prices.min(), prices.max()
+        if price_max > price_min:
+            normalized_prices = (prices - price_min) / (price_max - price_min)
+            weights = np.power(normalized_prices + 0.1, max(0.0, self.concentration) * 3)
         else:
-            # Weighted selection for concentration
-            price_min, price_max = prices.min(), prices.max()
-            if price_max > price_min:
-                normalized_prices = (prices - price_min) / (price_max - price_min)
-                weights = np.power(normalized_prices + 0.1, self.concentration * 3)
-            else:
-                weights = np.ones(len(players))
-            
-            weights = weights / weights.sum()
-            
-            # Try weighted selection with reduced attempts
-            max_attempts = min(50, len(players))
-            for attempt in range(max_attempts):
-                selected_indices = rng.choice(
-                    len(players), size=11, replace=False, p=weights
-                )
-                selected_ids = player_ids[selected_indices]
-                if prices[selected_indices].sum() <= budget:
-                    return selected_ids
+            weights = np.ones(len(players))
+        weights = weights / weights.sum()
+
+        # Try weighted selection within each position (with noise to diversify)
+        max_attempts = min(50, len(players))
+        for _ in range(max_attempts):
+            chosen_indices: list[int] = []
+            for pos, count in DEFAULT_FORMATION.items():
+                pool = pos_to_indices[pos]
+                if len(pool) < count:
+                    break
+                pos_weights = weights[pool]
+                # Inject small randomness to avoid identical picks
+                jitter = 0.05
+                pos_weights = pos_weights + jitter * rng.random(len(pos_weights))
+                pos_weights = pos_weights / pos_weights.sum()
+                chosen = rng.choice(pool, size=count, replace=False, p=pos_weights)
+                chosen_indices.extend(list(chosen))
+            if len(chosen_indices) != 11:
+                break
+            if prices[np.array(chosen_indices)].sum() <= budget:
+                return player_ids[np.array(chosen_indices)]
 
         # Fast greedy fallback - much faster than weighted selection
         selected_indices = []
@@ -145,18 +175,26 @@ class ConcentratedNpcPicker:
                     selected_indices.append(idx)
                     remaining_budget -= prices[idx]
         
-        # Fill remaining slots with cheapest players
+        # Fill by cheapest within remaining formation slots, randomizing among top options
         if len(selected_indices) < 11:
-            remaining_indices = [i for i in range(len(players)) if i not in selected_indices]
-            remaining_prices = prices[remaining_indices]
-            remaining_sorted = np.argsort(remaining_prices)
-            
-            for idx in remaining_sorted:
-                if len(selected_indices) >= 11:
-                    break
-                if remaining_prices[idx] <= remaining_budget:
-                    selected_indices.append(remaining_indices[idx])
-                    remaining_budget -= remaining_prices[idx]
+            counts = {k: 0 for k in DEFAULT_FORMATION.keys()}
+            for idx in selected_indices:
+                counts[players[idx].position] += 1
+            for pos, required in DEFAULT_FORMATION.items():
+                if counts[pos] >= required:
+                    continue
+                pool = [i for i in range(len(players)) if players[i].position == pos and i not in selected_indices]
+                pool = np.array(pool)
+                pool_sorted = pool[np.argsort(prices[pool])]
+                # Choose randomly among top_k cheapest for diversity
+                top_k = min(len(pool_sorted), max((required - counts[pos]) * 3, 1))
+                for idx in rng.choice(pool_sorted[:top_k], size=len(pool_sorted[:top_k]), replace=False):
+                    if counts[pos] >= required:
+                        break
+                    if prices[idx] <= remaining_budget:
+                        selected_indices.append(idx)
+                        counts[pos] += 1
+                        remaining_budget -= prices[idx]
 
         # Final fallback: cheapest 11 players
         if len(selected_indices) < 11:
@@ -198,8 +236,9 @@ class SimulationEngine:
 
         eo = compute_effective_ownership(field_squads, len(players))
 
-        # Step 3: "My" team selection
-        my_team = my_strategy_fn(eo, 11, rng)
+        # Step 3: "My" team selection with formation
+        from .strategies import select_team_with_formation
+        my_team = select_team_with_formation(eo, players, my_strategy_fn, DEFAULT_FORMATION, rng)
 
         # Step 4: Sample points
         points = points_model.sample_points(rng, players)

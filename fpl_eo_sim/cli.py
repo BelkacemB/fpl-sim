@@ -130,7 +130,7 @@ def run_monte_carlo(
     my_ranks = []
     field_scores_matrix = []
 
-    for _ in range(runs):
+    for i in range(runs):
         result = engine.simulate_once(
             rng, managers, players, npc_picker, my_strategy_fn, points_model, budget
         )
@@ -138,6 +138,12 @@ def run_monte_carlo(
         my_scores.append(result["my_score"])
         my_ranks.append(result["my_rank"])
         field_scores_matrix.append(result["field_scores"])
+
+        # Lightweight progress logging every ~5% or on last
+        if runs >= 20:
+            step = max(1, runs // 20)
+            if (i + 1) % step == 0 or i + 1 == runs:
+                print(f"Progress: {i + 1}/{runs}")
 
     my_scores = np.array(my_scores)
     my_ranks = np.array(my_ranks)
@@ -167,7 +173,7 @@ def main() -> None:
     parser.add_argument("--players", type=int, default=50, help="Number of players")
     parser.add_argument("--budget", type=float, default=100.0, help="Manager budget")
     parser.add_argument(
-        "--runs", type=int, default=5000, help="Number of simulation runs"
+        "--runs", type=int, default=500, help="Number of simulation runs"
     )
     parser.add_argument(
         "--points",
