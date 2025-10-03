@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from typing import Any
 
 import numpy as np
@@ -132,7 +133,7 @@ def run_monte_carlo(
 
     for i in range(runs):
         result = engine.simulate_once(
-            rng, managers, players, npc_picker, my_strategy_fn, points_model, budget
+            rng, managers, players, npc_picker, my_strategy_fn, points_model
         )
 
         my_scores.append(result["my_score"])
@@ -193,12 +194,6 @@ def main() -> None:
         default=5,
         help="Number of safe players for barbell strategy",
     )
-    parser.add_argument(
-        "--concentration",
-        type=float,
-        default=0.7,
-        help="Concentration level for NPC picker (0.0=uniform, 1.0=max concentration)",
-    )
 
     args = parser.parse_args()
 
@@ -210,7 +205,7 @@ def main() -> None:
     managers = create_synthetic_managers(args.managers, args.budget)
 
     # Create components
-    npc_picker = ConcentratedNpcPicker(concentration=args.concentration)
+    npc_picker = ConcentratedNpcPicker()
     points_model = get_points_model(args.points)
     my_strategy_fn = get_strategy_function(args.strategy)
 
@@ -243,7 +238,7 @@ def main() -> None:
     print(f"Managers: {results['managers']}")
     print(f"Players: {results['players']}")
     print(f"Budget: {results['budget']}")
-    print(f"Concentration: {args.concentration}")
+    # Concentration is randomized per run and no longer a fixed CLI parameter
     print()
 
     summary = results["summary"]
@@ -268,6 +263,14 @@ def main() -> None:
     print("\n" + "=" * 40)
     print("JSON Output:")
     print(json.dumps(results, indent=2))
+
+    outputs_dir = os.path.join(os.getcwd(), "outputs")
+    os.makedirs(outputs_dir, exist_ok=True)
+    filename = f"{args.strategy}_m{args.managers}_r{args.runs}.json"
+    output_path = os.path.join(outputs_dir, filename)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
+    print(f"Saved JSON to: {output_path}")
 
 
 if __name__ == "__main__":

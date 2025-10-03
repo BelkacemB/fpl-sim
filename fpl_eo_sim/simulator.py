@@ -103,20 +103,16 @@ class RandomNpcPicker:
 
 
 class ConcentratedNpcPicker:
-    """Optimized NPC picker that concentrates ownership around star players."""
+    """Optimized NPC picker that concentrates ownership around star players.
 
-    def __init__(self, concentration: float = 0.7):
-        """Initialize with concentration parameter.
-        
-        Args:
-            concentration: Concentration level (0.0 = uniform, 1.0 = maximum concentration)
-        """
-        self.concentration = max(0.0, min(1.0, concentration))
+    Concentration is randomized per run between 0.0 and 1.0.
+    """
 
     def pick_xi(
         self, rng: np.random.Generator, players: list[Player], budget: float
     ) -> np.ndarray:
         """Pick XI with concentration around star players under budget and formation."""
+        concentration = float(rng.random())
         player_ids = np.array([p.id for p in players])
         prices = np.array([p.price for p in players])
         pos_to_indices = {
@@ -136,7 +132,7 @@ class ConcentratedNpcPicker:
         price_min, price_max = prices.min(), prices.max()
         if price_max > price_min:
             normalized_prices = (prices - price_min) / (price_max - price_min)
-            weights = np.power(normalized_prices + 0.1, max(0.0, self.concentration) * 3)
+            weights = np.power(normalized_prices + 0.1, max(0.0, concentration) * 3)
         else:
             weights = np.ones(len(players))
         weights = weights / weights.sum()
@@ -165,7 +161,7 @@ class ConcentratedNpcPicker:
         selected_indices = []
         remaining_budget = budget
         
-        if self.concentration > 0.0:
+        if concentration > 0.0:
             # Sort by weight (descending) for concentration
             weight_sorted_indices = np.argsort(weights)[::-1]
             for idx in weight_sorted_indices:
@@ -212,8 +208,7 @@ class SimulationEngine:
         players: list[Player],
         npc_picker: RandomNpcPicker,
         my_strategy_fn: Callable[[np.ndarray, int, np.random.Generator], np.ndarray],
-        points_model: PointsModel | None = None,
-        budget: float = 100.0,
+        points_model: PointsModel | None = None
     ) -> dict[str, Any]:
         """Run a single simulation.
 

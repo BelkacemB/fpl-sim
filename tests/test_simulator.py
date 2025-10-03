@@ -105,7 +105,7 @@ def test_simulation_engine_simulate_once():
 
     # Run simulation
     result = engine.simulate_once(
-        rng, managers, players, npc_picker, my_strategy_fn, points_model, 100.0
+        rng, managers, players, npc_picker, my_strategy_fn, points_model
     )
 
     # Check result structure
@@ -158,10 +158,10 @@ def test_simulation_engine_deterministic():
 
     # Run simulation twice with same seed
     result1 = engine.simulate_once(
-        rng1, managers, players, npc_picker, my_strategy_fn, points_model, 100.0
+        rng1, managers, players, npc_picker, my_strategy_fn, points_model
     )
     result2 = engine.simulate_once(
-        rng2, managers, players, npc_picker, my_strategy_fn, points_model, 100.0
+        rng2, managers, players, npc_picker, my_strategy_fn, points_model
     )
 
     # Results should be identical
