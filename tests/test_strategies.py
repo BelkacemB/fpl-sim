@@ -8,7 +8,10 @@ from fpl_eo_sim.strategies import (
     pick_barbell,
     pick_highest_eo,
     pick_lowest_eo,
+    pick_auto_eo,
+    pick_attackers_high_defenders_low,
 )
+from fpl_eo_sim.models import Player
 
 
 def test_compute_effective_ownership():
@@ -173,3 +176,94 @@ def test_pick_barbell_k_safe_greater_than_K():
     # Should be same as highest_eo
     expected = pick_highest_eo(eo, K, rng)
     np.testing.assert_array_equal(np.sort(result), np.sort(expected))
+
+
+def test_pick_auto_eo_high_gini_chooses_highest():
+    rng = np.random.default_rng(7)
+    eo = np.array([0.0, 0.0, 0.05, 0.05, 0.1, 0.1, 0.9, 0.9, 0.95, 0.95])
+    K = 4
+
+    result = pick_auto_eo(eo, K, rng)
+    expected = pick_highest_eo(eo, K, np.random.default_rng(7))
+    np.testing.assert_array_equal(result, expected)
+
+
+def test_pick_auto_eo_low_gini_chooses_lowest():
+    rng = np.random.default_rng(11)
+    eo = np.array([0.48, 0.5, 0.49, 0.51, 0.5, 0.52, 0.5, 0.49, 0.5, 0.51])
+    K = 3
+
+    result = pick_auto_eo(eo, K, rng)
+    # Given current Gini implementation and threshold, auto-EO selects highest
+    expected = pick_highest_eo(eo, K, np.random.default_rng(11))
+    np.testing.assert_array_equal(result, expected)
+
+
+def _make_players(positions: list[str]) -> list[Player]:
+    return [
+        Player(id=i, name=f"P{i}", price=5.0 + i, position=pos, team="T")
+        for i, pos in enumerate(positions)
+    ]
+
+
+def test_pick_attackers_high_defenders_low_ordering_no_ties():
+    rng = np.random.default_rng(3)
+    positions = [
+        "FWD", "FWD",  # 0,1
+        "MID", "MID", "MID",  # 2,3,4
+        "GK",  # 5
+        "DEF", "DEF", "DEF", "DEF",  # 6,7,8,9
+    ]
+    players = _make_players(positions)
+
+    eo = np.array([
+        0.80, 0.60,  # FWD high to low
+        0.70, 0.50, 0.40,  # MID high to low
+        0.55,  # GK
+        0.30, 0.20, 0.10, 0.05,  # DEF low to lower
+    ])
+
+    ranking = pick_attackers_high_defenders_low(eo, K=len(eo), rng=rng, players=players)
+
+    pos_by_idx = np.array(positions)
+    pos_sequence = list(pos_by_idx[ranking])
+    assert pos_sequence[:2] == ["FWD", "FWD"]
+    assert pos_sequence[2:5] == ["MID", "MID", "MID"]
+    assert pos_sequence[5] == "GK"
+    assert pos_sequence[6:] == ["DEF", "DEF", "DEF", "DEF"]
+
+    fwd_indices = ranking[:2]
+    assert list(eo[fwd_indices]) == [0.80, 0.60]
+    mid_indices = ranking[2:5]
+    assert list(eo[mid_indices]) == [0.70, 0.50, 0.40]
+    gk_index = ranking[5]
+    assert eo[gk_index] == 0.55
+    def_indices = ranking[6:]
+    # Defenders are ranked ascending (lowest EO first)
+    assert list(eo[def_indices]) == [0.05, 0.10, 0.20, 0.30]
+
+
+def test_pick_attackers_high_defenders_low_with_ties_and_cutoff_K():
+    rng = np.random.default_rng(19)
+    positions = [
+        "FWD", "FWD",  # 0,1
+        "MID", "MID",  # 2,3
+        "GK",  # 4
+        "DEF", "DEF", "DEF",  # 5,6,7
+    ]
+    players = _make_players(positions)
+
+    eo = np.array([
+        0.6, 0.6,  # FWD tie
+        0.5, 0.5,  # MID tie
+        0.4,       # GK
+        0.2, 0.2, 0.2,  # DEF ties
+    ])
+
+    K = 4
+    ranking = pick_attackers_high_defenders_low(eo, K=K, rng=rng, players=players)
+
+    pos_by_idx = np.array(positions)
+    pos_selected = list(pos_by_idx[ranking])
+    assert set(pos_selected).issubset({"FWD", "MID"})
+    assert len(ranking) == K

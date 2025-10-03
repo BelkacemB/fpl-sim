@@ -24,6 +24,8 @@ from fpl_eo_sim.strategies import (
     pick_barbell,
     pick_highest_eo,
     pick_lowest_eo,
+    pick_auto_eo,
+    pick_attackers_high_defenders_low,
     pick_random,
 )
 
@@ -83,6 +85,8 @@ def get_strategy_function(strategy_name: str):
         "lowest_eo": pick_lowest_eo,
         "highest_eo": pick_highest_eo,
         "barbell": pick_barbell,
+        "auto_eo": pick_auto_eo,
+        "att_hi_def_lo": pick_attackers_high_defenders_low,
         "random": pick_random,
     }
 
@@ -184,7 +188,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--strategy",
-        choices=["lowest_eo", "highest_eo", "barbell", "random"],
+        choices=["lowest_eo", "highest_eo", "barbell", "auto_eo", "att_hi_def_lo", "random"],
         default="lowest_eo",
         help="Strategy",
     )

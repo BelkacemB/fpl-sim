@@ -153,7 +153,13 @@ def select_team_with_formation(
         rng = np.random.default_rng()
     required = formation or DEFAULT_FORMATION
 
-    ranking = strategy_fn(eo, len(eo), rng)
+    # Allow strategies that optionally accept players
+    import inspect
+    params = list(inspect.signature(strategy_fn).parameters.keys())
+    if "players" in params:
+        ranking = strategy_fn(eo, len(eo), rng, players=players)
+    else:
+        ranking = strategy_fn(eo, len(eo), rng)
     counts: dict[Position, int] = {"GK": 0, "DEF": 0, "MID": 0, "FWD": 0}
     selected: list[int] = []
     for idx in ranking:
@@ -166,3 +172,75 @@ def select_team_with_formation(
     if len(selected) != sum(required.values()):
         raise ValueError("Insufficient players to satisfy formation")
     return np.array(selected)
+
+
+def _gini(values: np.ndarray) -> float:
+    v = np.asarray(values, dtype=float)
+    if v.size == 0:
+        return 0.0
+    total = v.sum()
+    if total <= 0.0:
+        return 0.0
+    p = np.sort(v / total)
+    n = p.size
+    cumulative = np.cumsum(p)
+    lorenz_area = cumulative.sum() / n
+    return (n + 1 - 2 * lorenz_area) / n
+
+
+def pick_auto_eo(
+    eo: np.ndarray, K: int = 11, rng: np.random.Generator | None = None
+) -> np.ndarray:
+    if rng is None:
+        rng = np.random.default_rng()
+    g = _gini(eo)
+    threshold = 0.35
+    if g >= threshold:
+        return pick_highest_eo(eo, K, rng)
+    return pick_lowest_eo(eo, K, rng)
+
+
+def pick_attackers_high_defenders_low(
+    eo: np.ndarray,
+    K: int = 11,
+    rng: np.random.Generator | None = None,
+    *,
+    players: list[Player],
+) -> np.ndarray:
+    if rng is None:
+        rng = np.random.default_rng()
+
+    indices = np.arange(len(eo))
+    pos = np.array([p.position for p in players])
+
+    def _rank_group(group_indices: np.ndarray, descending: bool) -> np.ndarray:
+        if group_indices.size == 0:
+            return group_indices
+        vals = eo[group_indices]
+        order = np.argsort(vals)
+        if descending:
+            order = order[::-1]
+        sorted_idx = group_indices[order]
+        unique_vals, inv = np.unique(vals[order], return_inverse=True)
+        shuffled = np.empty_like(sorted_idx)
+        for i, _ in enumerate(unique_vals):
+            mask = inv == i
+            group = sorted_idx[mask]
+            rng.shuffle(group)
+            shuffled[mask] = group
+        return shuffled
+
+    fwd = indices[pos == "FWD"]
+    mid = indices[pos == "MID"]
+    defn = indices[pos == "DEF"]
+    gk = indices[pos == "GK"]
+
+    fwd_rank = _rank_group(fwd, descending=True)
+    mid_rank = _rank_group(mid, descending=True)
+    gk_rank = _rank_group(gk, descending=True)
+    def_rank = _rank_group(defn, descending=False)
+
+    ranking = np.concatenate([fwd_rank, mid_rank, gk_rank, def_rank])
+    if K < ranking.size:
+        return ranking[:K]
+    return ranking
