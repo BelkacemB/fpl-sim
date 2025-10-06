@@ -114,14 +114,19 @@ class FPLSeasonEOEnv(gym.Env):
         terminated = self.week >= self.horizon
         truncated = False
 
+        # weekly percentile-centered reward shaping
+        better_gw = (my_gw > gw_scores_field).sum()
+        equal_gw = (my_gw == gw_scores_field).sum()
+        reward_gw = (better_gw + 0.5 * equal_gw) / max(1, self.num_npc) - 0.5
+
         if terminated:
             better = (self.my_total > self.opp_totals).sum()
             equal = (self.my_total == self.opp_totals).sum()
             percentile = (better + 0.5 * equal) / max(1, self.num_npc)
-            reward = float(percentile - 0.5)
+            reward = float(reward_gw + (percentile - 0.5))
             obs = self._obs()
         else:
-            reward = 0.0
+            reward = float(reward_gw)
             self.eo = eo_gw
             obs = self._obs()
 
