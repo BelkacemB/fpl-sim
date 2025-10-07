@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from stable_baselines3 import PPO
 
-from .env import FPLSeasonEOEnv
+from learner.env import FPLSeasonEOEnv
 
 
 def train_demo(total_timesteps: int = 300_000) -> None:
     env = FPLSeasonEOEnv(
-        n_npc=400,
-        n_per_pos={0: 4, 1: 20, 2: 20, 3: 12},
-        horizon=38,
+        n_npc=1000,
+        n_per_pos={0: 10, 1: 20, 2: 20, 3: 20},
+        horizon=8,
         beta_follow_eo=1.2,
         beta_follow_skill=0.8,
         rng_seed=42,

@@ -25,20 +25,33 @@ def _negative_binomial_points(
     return rng.negative_binomial(n_param, p_param, n).astype(np.float32)
 
 
-def sample_points_poisson(pool: PlayerPool, rng: np.random.Generator) -> np.ndarray:
+def sample_points(
+    pool: PlayerPool, rng: np.random.Generator, beta_skill: float = 0.0
+) -> np.ndarray:
     points = np.zeros(pool.num_players, dtype=np.float32)
     for position, params in POSITION_PARAMS.items():
         ids = pool.position_to_ids[position]
         if ids.size == 0:
             continue
-        if params["distribution"] == "poisson":
-            vals = _poisson_points(rng, ids.size, params["mean"])
+        base_mean = params["mean"]
+        if beta_skill == 0.0:
+            scale = 1.0
         else:
-            vals = _negative_binomial_points(
-                rng, ids.size, params["mean"], params["dispersion"]
-            )
+            scale = np.exp(beta_skill * pool.skill[ids])
+        if params["distribution"] == "poisson":
+            lam = base_mean * scale
+            vals = rng.poisson(lam).astype(np.float32)
+        else:
+            r = params["dispersion"]
+            mean_i = base_mean * scale
+            p = r / (mean_i + r)
+            vals = rng.negative_binomial(r, p).astype(np.float32)
         points[ids] = vals
     return points
+
+
+def sample_points_poisson(pool: PlayerPool, rng: np.random.Generator) -> np.ndarray:
+    return sample_points(pool, rng, beta_skill=0.0)
 
 
 def score_team(team: np.ndarray, points: np.ndarray) -> float:

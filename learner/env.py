@@ -7,8 +7,8 @@ import gymnasium as gym
 from gymnasium import spaces
 
 from .constants import FORMATION
-from .npc import compute_effective_ownership, npc_pick_xi
-from .points import sample_points_poisson, score_team
+from .npc import compute_effective_ownership, npc_pick_xi_random
+from .points import sample_points, score_team
 from .policy import agent_pick_from_eo
 from .pool import PlayerPool
 
@@ -43,7 +43,7 @@ class FPLSeasonEOEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float32
         )
-        self.action_space = spaces.Discrete(2)
+        self.action_space = spaces.Discrete(3)
 
         self.week = 0
         self.eo: np.ndarray | None = None
@@ -87,11 +87,8 @@ class FPLSeasonEOEnv(gym.Env):
 
         field_squads = []
         for _ in range(self.num_npc):
-            squad = npc_pick_xi(
+            squad = npc_pick_xi_random(
                 pool=self.pool,
-                ownership_signal=self.eo,
-                beta_follow_eo=self.beta_eo,
-                beta_follow_skill=self.beta_skill,
                 rng=self.rng,
             )
             field_squads.append(squad)
@@ -101,7 +98,7 @@ class FPLSeasonEOEnv(gym.Env):
 
         my_team = agent_pick_from_eo(action, eo_gw, self.pool, self.rng)
 
-        points = sample_points_poisson(self.pool, self.rng)
+        points = sample_points(self.pool, self.rng, beta_skill=self.beta_skill)
         self.last_points = points
 
         gw_scores_field = points[field_squads].sum(axis=1).astype(np.float32)
@@ -140,6 +137,8 @@ class FPLSeasonEOEnv(gym.Env):
                 "action": int(action),
             }
         )
+        if terminated:
+            info["percentile"] = float(percentile)
         return obs, reward, terminated, truncated, info
 
     def render(self) -> None:

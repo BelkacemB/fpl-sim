@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -24,19 +24,21 @@ def pick_team_by_score(
     return np.array(team, dtype=int)
 
 
-def npc_pick_xi(
+def npc_pick_xi_by_skill(
     pool: PlayerPool,
-    ownership_signal: np.ndarray,
-    beta_follow_eo: float,
-    beta_follow_skill: float,
     rng: np.random.Generator,
+    beta_follow_skill: float = 1.0,
 ) -> np.ndarray:
-    z_eo = (ownership_signal - ownership_signal.mean()) / (ownership_signal.std() + 1e-8)
     z_skill = (pool.skill - pool.skill.mean()) / (pool.skill.std() + 1e-8)
-    noise = rng.normal(0.0, 0.3, size=pool.num_players)
-    score = beta_follow_eo * z_eo + beta_follow_skill * z_skill + noise
+    noise = rng.normal(0.0, 0.5, size=pool.num_players)
+    score = beta_follow_skill * z_skill + noise
     return pick_team_by_score(score, pool, FORMATION, rng)
 
+def npc_pick_xi_random(
+    pool: PlayerPool,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    return pick_team_by_score(rng.random(pool.num_players), pool, FORMATION, rng)
 
 def compute_effective_ownership(field_squads: np.ndarray, num_players: int) -> np.ndarray:
     counts = np.zeros(num_players, dtype=np.int32)

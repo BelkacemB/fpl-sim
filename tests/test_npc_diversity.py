@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from learner.pool import PlayerPool
-from learner.npc import npc_pick_xi
+from learner.npc import npc_pick_xi_random, npc_pick_xi_by_skill
 
 
 def test_npc_team_diversity():
@@ -14,7 +14,11 @@ def test_npc_team_diversity():
     teams = []
     team_sums = []
     for _ in range(100):
-        team = npc_pick_xi(
+        team = npc_pick_xi_random(
+            pool=pool,
+            rng=rng
+        )
+        team = npc_pick_xi_by_skill(
             pool=pool,
             rng=rng
         )
