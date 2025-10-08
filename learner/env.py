@@ -7,7 +7,8 @@ import gymnasium as gym
 from gymnasium import spaces
 
 from .constants import FORMATION
-from .npc import compute_effective_ownership, npc_pick_xi_random
+from .npc import compute_effective_ownership
+import learner.npc as npc_module
 from .points import sample_points, score_team
 from .policy import agent_pick_from_eo
 from .pool import PlayerPool
@@ -39,11 +40,11 @@ class FPLSeasonEOEnv(gym.Env):
         self.include_week = include_week_in_obs
 
         self.num_players = self.pool.num_players
-        obs_dim = self.num_players + (1 if self.include_week else 0)
+        obs_dim = 3
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float32
         )
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(2)
 
         self.week = 0
         self.eo: np.ndarray | None = None
@@ -60,12 +61,16 @@ class FPLSeasonEOEnv(gym.Env):
         prior = e / e.sum()
         self.eo = prior.astype(np.float32)
 
+    def _hhi_topk(self, eo: np.ndarray, k: int) -> float:
+        top = np.sort(eo)[-k:]
+        return float(np.sum(top * top))
+
     def _obs(self) -> np.ndarray:
         assert self.eo is not None
-        if self.include_week:
-            wk = np.array([self.week / max(1, self.horizon - 1)], dtype=np.float32)
-            return np.concatenate([self.eo, wk], axis=0).astype(np.float32)
-        return self.eo.astype(np.float32)
+        hhi10 = self._hhi_topk(self.eo, 10)
+        hhi20 = self._hhi_topk(self.eo, 20)
+        wk = float(self.week / max(1, self.horizon - 1))
+        return np.array([hhi10, hhi20, wk], dtype=np.float32)
 
     def reset(
         self, *, seed: int | None = None, options: Dict | None = None
@@ -87,9 +92,10 @@ class FPLSeasonEOEnv(gym.Env):
 
         field_squads = []
         for _ in range(self.num_npc):
-            squad = npc_pick_xi_random(
+            squad = npc_module.npc_pick_xi(
                 pool=self.pool,
                 rng=self.rng,
+                week=self.week,
             )
             field_squads.append(squad)
         field_squads = np.stack(field_squads, axis=0)
@@ -127,6 +133,10 @@ class FPLSeasonEOEnv(gym.Env):
             self.eo = eo_gw
             obs = self._obs()
 
+        better_cum = (self.my_total > self.opp_totals).sum()
+        equal_cum = (self.my_total == self.opp_totals).sum()
+        weekly_percentile = (better_gw + 0.5 * equal_gw) / max(1, self.num_npc)
+        cumulative_percentile = (better_cum + 0.5 * equal_cum) / max(1, self.num_npc)
         info.update(
             {
                 "week": self.week,
@@ -135,6 +145,8 @@ class FPLSeasonEOEnv(gym.Env):
                 "field_mean_gw": float(gw_scores_field.mean()),
                 "field_mean_total": float(self.opp_totals.mean()),
                 "action": int(action),
+                "weekly_percentile": float(weekly_percentile),
+                "cumulative_percentile": float(cumulative_percentile),
             }
         )
         if terminated:

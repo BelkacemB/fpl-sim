@@ -3,6 +3,7 @@ from __future__ import annotations
 from stable_baselines3 import PPO
 
 from learner.env import FPLSeasonEOEnv
+from learner.callbacks import ActionCountCallback
 
 
 def train_demo(total_timesteps: int = 300_000) -> None:
@@ -16,6 +17,8 @@ def train_demo(total_timesteps: int = 300_000) -> None:
         include_week_in_obs=True,
     )
 
+    # Concentrated picker is the default in env via learner.npc.npc_pick_xi
+
     model = PPO(
         "MlpPolicy",
         env,
@@ -27,7 +30,8 @@ def train_demo(total_timesteps: int = 300_000) -> None:
         ent_coef=0.01,
         learning_rate=3e-4,
     )
-    model.learn(total_timesteps=total_timesteps)
+    action_cb = ActionCountCallback(n_actions=env.action_space.n, log_freq=5000)
+    model.learn(total_timesteps=total_timesteps, callback=action_cb)
 
     obs, _ = env.reset(seed=777)
     total_r = 0.0

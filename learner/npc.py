@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import numpy as np
 
@@ -24,21 +24,31 @@ def pick_team_by_score(
     return np.array(team, dtype=int)
 
 
-def npc_pick_xi_by_skill(
-    pool: PlayerPool,
-    rng: np.random.Generator,
-    beta_follow_skill: float = 1.0,
-) -> np.ndarray:
-    z_skill = (pool.skill - pool.skill.mean()) / (pool.skill.std() + 1e-8)
-    noise = rng.normal(0.0, 0.5, size=pool.num_players)
-    score = beta_follow_skill * z_skill + noise
-    return pick_team_by_score(score, pool, FORMATION, rng)
+_week_size_to_trend: dict[tuple[int, int], np.ndarray] = {}
+_week_size_to_alpha: dict[tuple[int, int], float] = {}
 
-def npc_pick_xi_random(
+def npc_pick_xi(
     pool: PlayerPool,
     rng: np.random.Generator,
+    *,
+    week: int,
+    alpha: float | None = None,
+    trend_scale: float = 1.0,
+    tie_noise: float = 1e-6,
+    alpha_low: float = 0.3,
+    alpha_high: float = 0.9,
 ) -> np.ndarray:
-    return pick_team_by_score(rng.random(pool.num_players), pool, FORMATION, rng)
+    key = (int(week), int(pool.num_players))
+    if key not in _week_size_to_trend:
+        _week_size_to_trend[key] = rng.normal(0.0, trend_scale, size=pool.num_players)
+    if key not in _week_size_to_alpha:
+        sampled_alpha = float(rng.uniform(alpha_low, alpha_high))
+        _week_size_to_alpha[key] = sampled_alpha
+    trend = _week_size_to_trend[key]
+    effective_alpha = float(_week_size_to_alpha[key] if alpha is None else alpha)
+    individual = rng.normal(0.0, 1.0, size=pool.num_players)
+    scores = effective_alpha * trend + (1.0 - effective_alpha) * individual
+    return pick_team_by_score(scores, pool, FORMATION, rng, tie_noise=tie_noise)
 
 def compute_effective_ownership(field_squads: np.ndarray, num_players: int) -> np.ndarray:
     counts = np.zeros(num_players, dtype=np.int32)
@@ -46,5 +56,6 @@ def compute_effective_ownership(field_squads: np.ndarray, num_players: int) -> n
         counts[squad] += 1
     eo = counts / float(field_squads.shape[0])
     return eo.astype(np.float32)
+
 
 

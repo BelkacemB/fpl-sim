@@ -17,14 +17,10 @@ def agent_pick_from_eo(
     team: List[int] = []
     for position, required in FORMATION.items():
         candidates = pool.position_to_ids[position]
-        if action == 2:
-            perm = rng.permutation(candidates.shape[0])
-            chosen = candidates[perm[: required]]
-        else:
-            order = np.argsort(eo[candidates])
-            if action == 0:
-                order = order[::-1]
-            chosen = candidates[order[: required]]
+        order = np.argsort(eo[candidates])
+        if action == 0:
+            order = order[::-1]
+        chosen = candidates[order[: required]]
         team.extend(chosen.tolist())
     return np.array(team, dtype=int)
 

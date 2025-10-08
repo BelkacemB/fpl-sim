@@ -39,13 +39,20 @@ def sample_points(
         else:
             scale = np.exp(beta_skill * pool.skill[ids])
         if params["distribution"] == "poisson":
-            lam = base_mean * scale
-            vals = rng.poisson(lam).astype(np.float32)
+            if beta_skill == 0.0:
+                vals = rng.poisson(base_mean, ids.size).astype(np.float32)
+            else:
+                lam = base_mean * scale
+                vals = rng.poisson(lam).astype(np.float32)
         else:
             r = params["dispersion"]
-            mean_i = base_mean * scale
-            p = r / (mean_i + r)
-            vals = rng.negative_binomial(r, p).astype(np.float32)
+            if beta_skill == 0.0:
+                p = r / (base_mean + r)
+                vals = rng.negative_binomial(r, p, ids.size).astype(np.float32)
+            else:
+                mean_i = base_mean * scale
+                p = r / (mean_i + r)
+                vals = rng.negative_binomial(r, p).astype(np.float32)
         points[ids] = vals
     return points
 
